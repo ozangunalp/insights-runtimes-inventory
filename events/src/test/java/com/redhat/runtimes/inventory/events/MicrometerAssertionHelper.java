@@ -1,9 +1,10 @@
-/* Copyright (C) Red Hat 2023 */
+/* Copyright (C) Red Hat 2023-2024 */
 package com.redhat.runtimes.inventory.events;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -11,7 +12,6 @@ import jakarta.inject.Inject;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -32,13 +32,15 @@ public class MicrometerAssertionHelper {
 
   public void saveCounterValuesBeforeTest(String... counterNames) {
     for (String counterName : counterNames) {
-      counterValuesBeforeTest.put(counterName, registry.counter(counterName).count());
+      counterValuesBeforeTest.put(
+          counterName,
+          registry.find(counterName).counters().stream().mapToDouble(Counter::count).sum());
     }
   }
 
   public void assertCounterIncrement(String counterName, double expectedIncrement) {
     double actualIncrement =
-        registry.counter(counterName).count()
+        registry.find(counterName).counters().stream().mapToDouble(Counter::count).sum()
             - counterValuesBeforeTest.getOrDefault(counterName, 0D);
     assertEquals(expectedIncrement, actualIncrement);
   }
@@ -64,17 +66,7 @@ public class MicrometerAssertionHelper {
   public void awaitAndAssertTimerIncrement(String timerName, long expectedIncrement) {
     await()
         .atMost(Duration.ofSeconds(30L))
-        .until(
-            () -> {
-              Timer timer = findTimerByNameOnly(timerName);
-              if (timer == null) {
-                // The timer may be created after this method is executed.
-                return false;
-              } else {
-                long actualIncrement = Optional.ofNullable(timer.count()).orElse(0L);
-                return expectedIncrement == actualIncrement;
-              }
-            });
+        .untilAsserted(() -> assertEquals(expectedIncrement, countAllTimersByNameOnly(timerName)));
   }
 
   public void clearSavedValues() {
@@ -93,6 +85,10 @@ public class MicrometerAssertionHelper {
    */
   private Timer findTimerByNameOnly(String name) {
     return registry.find(name).timer();
+  }
+
+  private long countAllTimersByNameOnly(String name) {
+    return registry.find(name).timers().stream().mapToLong(Timer::count).sum();
   }
 
   /** Finds a collection of timers from their name only, tags are ignored. */

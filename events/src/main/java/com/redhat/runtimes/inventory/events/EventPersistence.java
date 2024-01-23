@@ -11,6 +11,7 @@ import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.RollbackException;
 import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.Optional;
@@ -21,7 +22,7 @@ public class EventPersistence {
   @Inject EntityManager entityManager;
 
   @Transactional
-  public void processMessage(ArchiveAnnouncement announce, String json) {
+  public void processMessage(ArchiveAnnouncement announce, String json) throws RollbackException {
     // Needs to be visible in the catch block
     JvmInstance inst;
     InsightsMessage msg = instanceOf(announce, json);

@@ -2,8 +2,6 @@
 package com.redhat.runtimes.inventory.events;
 
 import static com.redhat.runtimes.inventory.events.EventConsumer.CONSUMED_TIMER_NAME;
-import static com.redhat.runtimes.inventory.events.EventConsumer.EGG_CHANNEL;
-import static com.redhat.runtimes.inventory.events.EventConsumer.INGRESS_CHANNEL;
 import static com.redhat.runtimes.inventory.events.EventConsumer.PROCESSING_EXCEPTION_COUNTER_NAME;
 import static com.redhat.runtimes.inventory.events.TestUtils.inputStreamFromResources;
 import static com.redhat.runtimes.inventory.events.TestUtils.readBytesFromResources;
@@ -23,8 +21,9 @@ import com.redhat.runtimes.inventory.models.InsightsMessage;
 import com.redhat.runtimes.inventory.models.JvmInstance;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
-import io.smallrye.reactive.messaging.memory.InMemoryConnector;
-import jakarta.enterprise.inject.Any;
+import io.quarkus.test.kafka.InjectKafkaCompanion;
+import io.quarkus.test.kafka.KafkaCompanionResource;
+import io.smallrye.reactive.messaging.kafka.companion.KafkaCompanion;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -37,25 +36,27 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Map;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-@QuarkusTestResource(TestLifecycleManager.class)
+@QuarkusTestResource(KafkaCompanionResource.class)
 public class EventConsumerIT {
 
   @Inject EntityManager entityManager;
 
-  @Inject @Any InMemoryConnector inMemoryConnector;
-
+  @InjectKafkaCompanion KafkaCompanion companion;
   @Inject MicrometerAssertionHelper micrometerAssertionHelper;
 
   @Inject ArchiveFetcher archiveFetcher;
 
   @Inject EventConsumer eventConsumer;
 
-  private static String fixedDate = "2023-04-01T01:00:00Z";
+  private static final String fixedDate = "2023-04-01T01:00:00Z";
+  private static final String eggTopic = "platform.inventory.events";
+  private static final String ingressTopic = "platform.upload.announce";
 
   @BeforeEach
   void beforeEach() {
@@ -86,7 +87,10 @@ public class EventConsumerIT {
     archiveFetcher.setHttpClient(mockClient);
 
     String kafkaMessage = readFromResources("egg_is_runtimes.json");
-    inMemoryConnector.source(EGG_CHANNEL).send(kafkaMessage);
+    companion
+        .produceStrings()
+        .fromRecords(new ProducerRecord<>(eggTopic, kafkaMessage))
+        .awaitCompletion();
 
     micrometerAssertionHelper.awaitAndAssertTimerIncrement(CONSUMED_TIMER_NAME, 1);
     micrometerAssertionHelper.assertCounterIncrement(PROCESSING_EXCEPTION_COUNTER_NAME, 0);
@@ -106,7 +110,10 @@ public class EventConsumerIT {
 
     archiveFetcher.setHttpClient(mockClient);
     String kafkaMessage = readFromResources("incoming_kafka1.json");
-    inMemoryConnector.source(INGRESS_CHANNEL).send(kafkaMessage);
+    companion
+        .produceStrings()
+        .fromRecords(new ProducerRecord<>(ingressTopic, kafkaMessage))
+        .awaitCompletion();
 
     micrometerAssertionHelper.awaitAndAssertTimerIncrement(CONSUMED_TIMER_NAME, 1);
     micrometerAssertionHelper.assertCounterIncrement(PROCESSING_EXCEPTION_COUNTER_NAME, 0);
@@ -115,8 +122,11 @@ public class EventConsumerIT {
   }
 
   @Test
-  void testInvalidPayload() throws IOException {
-    inMemoryConnector.source(INGRESS_CHANNEL).send("not a real payload");
+  void testInvalidPayload() {
+    companion
+        .produceStrings()
+        .fromRecords(new ProducerRecord<>(ingressTopic, "not a real payload"))
+        .awaitCompletion();
     micrometerAssertionHelper.awaitAndAssertTimerIncrement(CONSUMED_TIMER_NAME, 1);
     micrometerAssertionHelper.assertCounterIncrement(PROCESSING_EXCEPTION_COUNTER_NAME, 1);
   }
@@ -246,14 +256,20 @@ public class EventConsumerIT {
       throw new RuntimeException("Error in unmarshalling JSON", e);
     }
     // First submit a good object
-    inMemoryConnector.source(INGRESS_CHANNEL).send(kafkaFirst);
+    companion
+        .produceStrings()
+        .fromRecords(new ProducerRecord<>(ingressTopic, kafkaFirst))
+        .awaitCompletion();
 
     micrometerAssertionHelper.awaitAndAssertTimerIncrement(CONSUMED_TIMER_NAME, 1);
     micrometerAssertionHelper.assertCounterIncrement(PROCESSING_EXCEPTION_COUNTER_NAME, 0);
     TestUtils.await_entity_count(entityManager, "JvmInstance", 1L);
 
     // This should error because of a duplicate object
-    inMemoryConnector.source(INGRESS_CHANNEL).send(kafkaSecond);
+    companion
+        .produceStrings()
+        .fromRecords(new ProducerRecord<>(ingressTopic, kafkaSecond))
+        .awaitCompletion();
 
     micrometerAssertionHelper.awaitAndAssertTimerIncrement(CONSUMED_TIMER_NAME, 2);
     micrometerAssertionHelper.assertCounterIncrement(PROCESSING_EXCEPTION_COUNTER_NAME, 1);
@@ -262,7 +278,10 @@ public class EventConsumerIT {
     // Now we submit a new object and see that it persists
     buffy = readBytesFromResources("eap_example1.json.gz");
     when(mockResponse.body()).thenReturn(buffy);
-    inMemoryConnector.source(INGRESS_CHANNEL).send(kafkaSecond);
+    companion
+        .produceStrings()
+        .fromRecords(new ProducerRecord<>(ingressTopic, kafkaSecond))
+        .awaitCompletion();
 
     micrometerAssertionHelper.awaitAndAssertTimerIncrement(CONSUMED_TIMER_NAME, 3);
     micrometerAssertionHelper.assertCounterIncrement(PROCESSING_EXCEPTION_COUNTER_NAME, 1);
