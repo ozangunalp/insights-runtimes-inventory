@@ -1,4 +1,4 @@
-/* Copyright (C) Red Hat 2023 */
+/* Copyright (C) Red Hat 2024 */
 package com.redhat.runtimes.inventory.events;
 
 import static com.redhat.runtimes.inventory.events.TestUtils.inputStreamFromResources;
@@ -20,18 +20,19 @@ import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-public class EventConsumerTest {
+public class ArchiveFetcherTest {
 
   @Test
   public void testEggUnzip() throws IOException {
     var archive = inputStreamFromResources("egg_upload.tar.gz");
-    var jsonFiles = EventConsumer.getJsonsFromArchiveStream(archive);
+    ArchiveFetcher archiveFetcher = new ArchiveFetcher();
+    var jsonFiles = archiveFetcher.getJsonsFromArchiveStream(archive);
   }
 
   @Test
   public void testSimpleUnzip() throws IOException {
     var buffy = readBytesFromResources("1J6DOEu9ni-000029.gz");
-    var json = EventConsumer.unzipJson(buffy);
+    var json = ArchiveFetcher.unzipJson(buffy);
     TypeReference<Map<String, Object>> typeRef = new TypeReference<>() {};
     var mapper = new ObjectMapper();
     var o = mapper.readValue(json, typeRef);
@@ -46,7 +47,7 @@ public class EventConsumerTest {
     dummy.setTimestamp(Instant.now());
 
     var buffy = readBytesFromResources("jdk8_MWTELE-66.gz");
-    var json = EventConsumer.unzipJson(buffy);
+    var json = ArchiveFetcher.unzipJson(buffy);
 
     var msg = instanceOf(dummy, json);
     assertTrue(msg instanceof JvmInstance);
@@ -75,7 +76,7 @@ public class EventConsumerTest {
     dummy.setTimestamp(Instant.MIN);
 
     var buffy = readBytesFromResources("update1.json.gz");
-    var json = EventConsumer.unzipJson(buffy);
+    var json = ArchiveFetcher.unzipJson(buffy);
     var msg = instanceOf(dummy, json);
     assertTrue(msg instanceof UpdateInstance);
     var inst = (UpdateInstance) msg;
@@ -117,7 +118,7 @@ public class EventConsumerTest {
   @SuppressWarnings("unchecked")
   public void testJarHashAttributes() throws IOException {
     byte[] buffy = readBytesFromResources("jdk8_MWTELE-66.gz");
-    String json = EventConsumer.unzipJson(buffy);
+    String json = ArchiveFetcher.unzipJson(buffy);
     ObjectMapper objectMapper = new ObjectMapper();
     Map<String, Object> map =
         objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});

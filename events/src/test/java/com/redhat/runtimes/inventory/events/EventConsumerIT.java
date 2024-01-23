@@ -1,4 +1,4 @@
-/* Copyright (C) Red Hat 2023 */
+/* Copyright (C) Red Hat 2023-2024 */
 package com.redhat.runtimes.inventory.events;
 
 import static com.redhat.runtimes.inventory.events.EventConsumer.CONSUMED_TIMER_NAME;
@@ -51,6 +51,10 @@ public class EventConsumerIT {
 
   @Inject MicrometerAssertionHelper micrometerAssertionHelper;
 
+  @Inject ArchiveFetcher archiveFetcher;
+
+  @Inject EventConsumer eventConsumer;
+
   private static String fixedDate = "2023-04-01T01:00:00Z";
 
   @BeforeEach
@@ -58,7 +62,7 @@ public class EventConsumerIT {
     TestUtils.clearTables(entityManager);
     micrometerAssertionHelper.saveCounterValuesBeforeTest(PROCESSING_EXCEPTION_COUNTER_NAME);
     micrometerAssertionHelper.removeDynamicTimer(CONSUMED_TIMER_NAME);
-    EventConsumer.setClock(Clock.fixed(Instant.parse(fixedDate), ZoneId.systemDefault()));
+    eventConsumer.setClock(Clock.fixed(Instant.parse(fixedDate), ZoneId.systemDefault()));
   }
 
   @AfterEach
@@ -79,7 +83,7 @@ public class EventConsumerIT {
         .thenReturn(mockResponse);
     when(mockResponse.body()).thenReturn(archive);
 
-    EventConsumer.setHttpClient(mockClient);
+    archiveFetcher.setHttpClient(mockClient);
 
     String kafkaMessage = readFromResources("egg_is_runtimes.json");
     inMemoryConnector.source(EGG_CHANNEL).send(kafkaMessage);
@@ -100,7 +104,7 @@ public class EventConsumerIT {
         .thenReturn(mockResponse);
     when(mockResponse.body()).thenReturn(buffy);
 
-    EventConsumer.setHttpClient(mockClient);
+    archiveFetcher.setHttpClient(mockClient);
     String kafkaMessage = readFromResources("incoming_kafka1.json");
     inMemoryConnector.source(INGRESS_CHANNEL).send(kafkaMessage);
 
@@ -126,7 +130,7 @@ public class EventConsumerIT {
     dummy.setTimestamp(Instant.now());
 
     byte[] buffy = readBytesFromResources("jdk8_MWTELE-66.gz");
-    String json = EventConsumer.unzipJson(buffy);
+    String json = ArchiveFetcher.unzipJson(buffy);
 
     InsightsMessage inst = instanceOf(dummy, json);
     assertTrue(inst instanceof JvmInstance);
@@ -225,7 +229,7 @@ public class EventConsumerIT {
         .thenReturn(mockResponse);
     when(mockResponse.body()).thenReturn(buffy);
 
-    EventConsumer.setHttpClient(mockClient);
+    archiveFetcher.setHttpClient(mockClient);
     String kafkaFirst = readFromResources("incoming_kafka1.json");
     String kafkaSecond = "";
     String kafkaThird = "";

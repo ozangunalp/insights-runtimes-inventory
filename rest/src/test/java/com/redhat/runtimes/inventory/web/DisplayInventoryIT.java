@@ -1,4 +1,4 @@
-/* Copyright (C) Red Hat 2023 */
+/* Copyright (C) Red Hat 2023-2024 */
 package com.redhat.runtimes.inventory.web;
 
 import static com.redhat.runtimes.inventory.MockServerConfig.RbacAccess.FULL_ACCESS;
@@ -16,7 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redhat.runtimes.inventory.MockServerConfig;
 import com.redhat.runtimes.inventory.events.ArchiveAnnouncement;
-import com.redhat.runtimes.inventory.events.EventConsumer;
+import com.redhat.runtimes.inventory.events.ArchiveFetcher;
 import com.redhat.runtimes.inventory.events.TestUtils;
 import com.redhat.runtimes.inventory.events.Utils;
 import com.redhat.runtimes.inventory.models.EapInstance;
@@ -87,7 +87,7 @@ public class DisplayInventoryIT {
 
   private JvmInstance getJvmInstanceFromZipJsonFile(String filename) throws IOException {
     byte[] buffy = TestUtils.readBytesFromResources(filename);
-    String json = EventConsumer.unzipJson(buffy);
+    String json = ArchiveFetcher.unzipJson(buffy);
     InsightsMessage message = Utils.instanceOf(setupArchiveAnnouncement(), json);
     assertTrue(message instanceof JvmInstance);
     JvmInstance instance = (JvmInstance) message;
